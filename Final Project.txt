@@ -1,0 +1,158 @@
+import numpy as np
+import pandas as pd
+from pandas.tseries.offsets import MonthEnd
+
+filepath = 'C:\\Users\\tlpac\\OneDrive\\Documents\\ISQS 6339\\'
+filepath2 = 'C:\\Users\\tlpac\\Downloads\\'
+file2 = 'us_counties_data.csv'
+file4 = 'UnemploymentByState.csv'
+file5 = 'UnemploymentByCounty_NYC(1).csv'
+file6 = 'ACSdataForMerge_NYC.csv'
+file_map = 'all-geocodes-v2017.csv'
+filewritecsv = 'FinalProject.csv'
+
+#I had to change some of the data to strings before bringing them in so I will not lose any data.
+df_acs = pd.read_csv(filepath2 + file6, dtype = {'FIPS_state':str, 'FIPS_county':str, 'fips':str})
+df_map = pd.read_csv(filepath2 + file_map, encoding='latin-1', dtype=object)
+df_counties = pd.read_csv(filepath + file2)
+df_StUnemployment = pd.read_csv(filepath2 + file4)
+df_CUnemployment = pd.read_csv(filepath2 + file5, dtype = {'FIPS_state':str, 'FIPS_county':str, 'fips':str, 'Unemployment Rate':str})
+
+df_CUnemployment['Unemployment Rate'] = df_CUnemployment['Unemployment Rate'].replace('-', np.NaN)
+df_CUnemployment[['Unemployment Rate']] = df_CUnemployment[['Unemployment Rate']].astype(float)
+
+#I wanted to get rid of the years 2018 and 2019 and only leave 2020
+df_CUnemployment = df_CUnemployment[df_CUnemployment.year != 2018]
+df_CUnemployment = df_CUnemployment[df_CUnemployment.year != 2019]
+df_CUnemployment
+
+#Splitting area_text into County and State
+df_CUnemployment[['County','State_Abrv']] = df_CUnemployment['area_text'].str.split(',', expand = True)
+df_CUnemployment.drop('area_text', axis=1, inplace = True)
+df_CUnemployment.drop('area_code', axis=1, inplace = True)
+df_CUnemployment.drop('FIPS_state', axis=1, inplace = True)
+df_CUnemployment.drop('FIPS_county', axis=1, inplace=True)
+df_CUnemployment['Fips'] = df_CUnemployment['fips']
+df_CUnemployment.drop('fips', axis=1, inplace=True)
+
+#Changing the months to numbers so that both dataframes have the same string
+df_CUnemployment['Month'] = '1'
+df_CUnemployment['Month'][df_CUnemployment['month'] == 'February'] = '2'
+df_CUnemployment['Month'][df_CUnemployment['month'] == 'March'] = '3'
+df_CUnemployment['Month'][df_CUnemployment['month'] == 'April'] = '4'
+df_CUnemployment['Month'][df_CUnemployment['month'] == 'May'] = '5'
+df_CUnemployment['Month'][df_CUnemployment['month'] == 'June'] = '6'
+df_CUnemployment['Month'][df_CUnemployment['month'] == 'July'] = '7'
+df_CUnemployment.drop('month', axis = 1, inplace = True)
+
+#We were getting errors when trying to sort the data so we replaced the missing values with null.
+df_StUnemployment['Unemployment Rate'] = df_StUnemployment['Unemployment Rate'].replace('-', np.NaN)
+df_StUnemployment[['Unemployment Rate']] = df_StUnemployment[['Unemployment Rate']].astype(float)
+
+#We did not want 2018 or 2019 data, so it was dropped.
+df_StUnemployment = df_StUnemployment[df_StUnemployment.year != 2018]
+df_StUnemployment = df_StUnemployment[df_StUnemployment.year != 2019]
+
+#Changing column name
+df_StUnemployment['State_Abrv'] = df_StUnemployment['area_text']
+df_StUnemployment.drop('area_text', axis = 1, inplace = True)
+df_StUnemployment['County'] = 'Unknown County'
+
+#Changing the months to numbers so that both dataframes have the same string
+df_StUnemployment['Month'] = '1'
+df_StUnemployment['Month'][df_StUnemployment['month'] == 'February'] = '2'
+df_StUnemployment['Month'][df_StUnemployment['month'] == 'March'] = '3'
+df_StUnemployment['Month'][df_StUnemployment['month'] == 'April'] = '4'
+df_StUnemployment['Month'][df_StUnemployment['month'] == 'May'] = '5'
+df_StUnemployment['Month'][df_StUnemployment['month'] == 'June'] = '6'
+df_StUnemployment['Month'][df_StUnemployment['month'] == 'July'] = '7'
+df_StUnemployment.drop('month', axis = 1, inplace = True)
+
+
+df_StUnemployment['Fips'] = df_StUnemployment['area_code'].str[2:4]
+df_StUnemployment.drop('area_code', axis=1, inplace=True)
+
+#Concat the 2 unemployment files so that we don't merge with two different times with the counties data
+df_UnemploymentMerge = pd.concat([df_CUnemployment, df_StUnemployment])
+
+#Adding county to make the dataframes across
+df_counties['county'] = df_counties['county'] + ' County'
+
+
+#I am making the months into a string and dropping the date column
+df_counties['date'] = pd.to_datetime(df_counties['date'])
+df_counties['month'] = pd.DatetimeIndex(df_counties['date']).month
+df_counties[['month']] = df_counties[['month']].astype(str)
+
+
+#Adding a 0 if the length of the string is 4. Had to fill the null values with 0, and then change the type to string
+df_counties['fips'] = df_counties['fips'].fillna(0)
+df_counties[['fips']] = df_counties[['fips']].astype(int)
+df_counties[['fips']] = df_counties[['fips']].astype(str)
+df_counties['fips'][df_counties['fips'].str.len() == 4] = '0' + df_counties['fips']
+
+#We want to map the columns to the FIPS, so we had a map and changed the map to where it is only states. Then, we set the conditions
+#so we can drop the rows that we do no need.
+Da = df_map.drop(df_map[(df_map['County Code (FIPS)'] != '000') | (df_map['County Subdivision Code (FIPS)'] !='00000') | (df_map['Place Code (FIPS)'] != '00000') | (df_map['Consolidtated City Code (FIPS)'] != '00000')].index, inplace = False)
+Da = Da.set_index('Area Name (including legal/statistical area description)')
+Da = Da['State Code (FIPS)']
+
+df_counties.loc[df_counties['county'][df_counties['county']=="Unknown County"].index,'fips'] = df_counties['state'].map(Da)
+
+
+#dropping Joplin from the dataset, setting New York = 36-01, merging rows Kansas City and Jackson County, dropping US territorities.
+df_counties = df_counties.drop(df_counties[(df_counties['county'] == 'Joplin County')].index, inplace=False)
+df_counties = df_counties.drop(df_counties[(df_counties['state'] == 'Guam')].index, inplace=False)
+df_counties = df_counties.drop(df_counties[(df_counties['state'] == 'Northern Mariana Islands')].index, inplace=False)
+df_counties = df_counties.drop(df_counties[(df_counties['state'] == 'Virgin Islands')].index, inplace=False)
+df_counties['fips'][df_counties['county'] == 'New York City County'] = '36-01'
+df_counties['fips'][df_counties['county'] == 'Kansas City County'] = '29095'
+KansasCity = df_counties.drop(df_counties[(df_counties['fips'] != '29095')].index, inplace=False)
+a = KansasCity.groupby(['fips', 'date', 'month']).sum()
+a.reset_index(drop=False, inplace=True)
+a['county'] = 'Jackson/Kansas City County'
+a['state'] = 'Missouri'
+df_counties.drop(df_counties[(df_counties['fips'] == '29095')].index, inplace=True)
+df_counties = pd.concat([df_counties, a])
+df_counties.reset_index(drop=True, inplace=True)
+
+#Changing the data back to string so that we can do the next section
+df_counties[['date']] = df_counties[['date']].astype(str)
+df_counties.dtypes
+
+#Making a list and then checking to see if the data is in the list to make a new column.
+last_day = ['2020-01-31', '2020-02-29', '2020-03-31', '2020-04-30', '2020-05-31', '2020-06-30', '2020-07-31', '2020-08-31', '2020-09-17']
+newdf =df_counties[df_counties['date'].isin(last_day)]
+newdf['date'] = pd.to_datetime(newdf['date'])
+
+newdf['End of Previous Month'] = pd.to_datetime(newdf['date'], format="%Y%m") + MonthEnd(-1)
+newdf['last month cases'] = 0
+newdf['last month deaths'] = 0
+newdf.reset_index(drop=True, inplace = True)
+newdf[['date']] = newdf[['date']].astype(str)
+newdf[['End of Previous Month']] = newdf[['End of Previous Month']].astype(str)
+
+#Iterating accross the rows to get the new datasets in the column. The if statement is so that the program skips over the necessary values.
+for index, r in newdf.iterrows(): 
+    if newdf[(newdf['date']==newdf.at[index, 'End of Previous Month']) & (newdf['fips']==newdf.at[index, 'fips'])].index != 'NaN':
+        newdf.at[index, 'last month cases'] = newdf.lookup(newdf[(newdf['date']==newdf.at[index, 'End of Previous Month']) & (newdf['fips']==newdf.at[index, 'fips'])].index, ['cases'])
+        newdf.at[index, 'last month deaths'] = newdf.lookup(newdf[(newdf['date']==newdf.at[index, 'End of Previous Month']) & (newdf['fips']==newdf.at[index, 'fips'])].index, ['deaths'])
+
+#Getting the monthly increase
+newdf['delta_cases'] = newdf['cases'] - newdf['last month cases']
+newdf['delta_deaths'] = newdf['deaths'] - newdf['last month deaths']
+
+#Merging the counties and Unemployment data, dropping duplicate rows.
+df_merge = newdf.merge(df_UnemploymentMerge, how='left', left_on = ['fips', 'month'], right_on = ['Fips', 'Month'])
+df_merge.drop('County', axis = 1, inplace=True)
+df_merge.drop('Fips', axis = 1, inplace=True)
+df_merge.drop('Month', axis=1, inplace = True)
+df_merge
+
+#Merging the demographic data and the previous merge, dropping duplicate rows.
+df_Finalmerge = df_merge.merge(df_acs, how = 'left', left_on = ['fips'], right_on = ['fips'])
+df_Finalmerge.drop('County_Name', axis = 1, inplace=True)
+df_Finalmerge.drop('State_Name', axis = 1, inplace= True)
+df_Finalmerge.drop('State_Abbr', axis = 1, inplace = True)
+
+df_Finalmerge.to_csv(filepath + filewritecsv, index = False)
